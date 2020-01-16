@@ -1,0 +1,8 @@
+name = "SparClur2"
+uuid = "594bb6d9-511d-4ce9-be79-3f13112d6af6"
+authors = ["LEAXPS-15\\lkape <lkapelevich@yahoo.com.au>"]
+version = "0.1.0"
+
+[deps]
+JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
