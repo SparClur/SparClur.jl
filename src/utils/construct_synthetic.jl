@@ -1,4 +1,5 @@
 using Random
+import StatsBase: sample
 
 function construct_synthetic(
     num_features::Int,

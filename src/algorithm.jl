@@ -2,35 +2,38 @@
     solve_MIOP
 """
 function solve_MIOP(
-    Xs::Matrix{Float64},
-    Ys::Vector{Float64},
-    sparsity::Int,
+    Xs::Vector{Matrix{Float64}},
+    Ys::Vector{Vector{Float64}},
+    num_relevant::Int,
     γ::Float64,
     optimizer;
     optimizer_params = NamedTuple(),
     )
-    num_clusters = length(clusters)
+    num_clusters = length(Ys)
     num_features = size(Xs[1], 2)
     num_samples  = sum(length(Y) for Y in Ys)
     dual_vars = [similar(Y) for Y in Ys]
-    work = [similar(Y) for Y in Ys]
     bin_grad = zeros(num_features)
-    bin_init = collect(1:num_relevant)
-    initial_bound = regression_objective!(bin_grad, clusters, s0, γ, num_samples)
+    bin_init = zeros(num_features)
+    work = similar(bin_grad)
+    @views bin_init[1:num_relevant] .= 1
+    initial_bound = regression_objective!(Xs, Ys, bin_grad, bin_init, γ, num_samples, dual_vars, work)
 
-    model = Model()
-    set_optimizer(model, () -> optimizer(; optimizer_params...))
-    @variable(model, bin_var[i in 1:num_features], Bin, start = s0[i])
+    # model = Model()
+    # set_optimizer(model, () -> optimizer(; optimizer_params...))
+    model = direct_model(optimizer())
+    @variable(model, bin_var[i in 1:num_features], Bin, start = bin_init[i])
     @variable(model, approx_obj >= 0)
     @objective(model, Min, approx_obj)
-    @constraint(model, sum(s) <= sparsity)
-    @constraint(model, approx_obj >= initial_bound + dot(∇s, s - s0)) # turn on for a warm start
+    @constraint(model, sum(bin_var) <= num_relevant)
+    @constraint(model, approx_obj >= initial_bound + dot(bin_grad, bin_var - bin_init)) # turn on for a warm start
 
     function outer_approximation(cb_data)
-        bin_val = callback_value(cb_data, bin_var)
+        bin_val = map(x -> callback_value(cb_data, x), bin_var)
         obj = regression_objective!(Xs, Ys, bin_grad, bin_val, γ, num_samples, dual_vars, work)
         con = @build_constraint(approx_obj >= obj + dot(bin_grad, bin_var - bin_val))
         MOI.submit(model, MOI.LazyConstraint(cb_data), con)
+        print(backend(model))
     end
     MOI.set(model, MOI.LazyConstraintCallback(), outer_approximation)
 
@@ -53,9 +56,14 @@ function solve_MIOP(
     return (supp, weights)
 end
 
-getsupport(s::Vector{Float64}) = find(s .> 0.5)
+getsupport(s::Vector{Float64}) = findall(s .> 0.5)
 
-function calc_dual!(dual_var::Vector{Float64}, γ::Float64, Z::Matrix{Float64}, Y::Vector{Float64})
+function calc_dual!(
+    dual_var::Vector{Float64},
+    γ::Float64,
+    Z::AbstractMatrix{Float64},
+    Y::Vector{Float64},
+    )
     k = size(Z, 2)
     # compute (Iₙ + γZZᵀ)⁻¹ Y  via Y - Z (Iₚ / γ + γZᵀZ)⁻¹ Zᵀ Y
     # unfortunately the size of Z matrices is unknown each iteration
@@ -76,24 +84,23 @@ function regression_objective!(
     bin_val::Vector{Float64},
     γ::Float64,
     num_samples::Int,
-    dual_vars::Vector{Float64},
+    dual_vars::Vector{Vector{Float64}},
     work::Vector{Float64},
     )
     bin_grad .= 0
     obj = 0.0
-    supp = getsupport(s)
+    supp = getsupport(bin_val)
     k = length(supp)
     # compute optimal dual parameter for each cluster
     for i in eachindex(Xs)
         Z = view(Xs[i], :, supp)
         calc_dual!(dual_vars[i], γ, Z, Ys[i])
 
-        mul!(work[i], Z', dual_vars[i])
-        for i in eachindex(work[i])
-            work[i] = abs2(work[i])
+        mul!(work, Xs[i]', dual_vars[i])
+        for j in eachindex(work)
+            work[j] = abs2(work[j])
         end
-        axpby!(-γ, work[i], true, bin_grad)
-
+        axpby!(-γ, work, true, bin_grad)
         obj += dot(Ys[i], dual_vars[i])
     end
     @. bin_grad /= 2num_samples
