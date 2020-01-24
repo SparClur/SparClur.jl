@@ -19,10 +19,8 @@ function solve_MIOP(
     @views bin_init[1:num_relevant] .= 1
     initial_bound = regression_objective!(Xs, Ys, bin_grad, bin_init, γ, num_samples, dual_vars, work)
 
-    # model = Model()
-    # set_optimizer(model, () -> optimizer(; optimizer_params...))
     model = direct_model(optimizer())
-    @variable(model, bin_var[i in 1:num_features], Bin, start = bin_init[i])
+    @variable(model, bin_var[i in 1:num_features], Bin) #, start = bin_init[i])
     @variable(model, approx_obj >= 0)
     @objective(model, Min, approx_obj)
     @constraint(model, sum(bin_var) <= num_relevant)
@@ -30,10 +28,12 @@ function solve_MIOP(
 
     function outer_approximation(cb_data)
         bin_val = map(x -> callback_value(cb_data, x), bin_var)
+        approx_obj_val = callback_value(cb_data, approx_obj)
         obj = regression_objective!(Xs, Ys, bin_grad, bin_val, γ, num_samples, dual_vars, work)
-        con = @build_constraint(approx_obj >= obj + dot(bin_grad, bin_var - bin_val))
-        MOI.submit(model, MOI.LazyConstraint(cb_data), con)
-        print(backend(model))
+        if approx_obj_val < obj - 1e-6
+            con = @build_constraint(approx_obj >= obj + dot(bin_grad, bin_var - bin_val))
+            MOI.submit(model, MOI.LazyConstraint(cb_data), con)
+        end
     end
     MOI.set(model, MOI.LazyConstraintCallback(), outer_approximation)
 
@@ -41,15 +41,16 @@ function solve_MIOP(
 
     # recover optimal weights
     supp = getsupport(value.(bin_var))
+    weights = [Float64[] for _ in eachindex(Ys)]
     for i in 1:num_clusters
         Z = Xs[i][:, supp]
         # if not underdetermined
         if length(supp) <= size(Z, 1)
             # just do least squares
-            solution.weights[i] = (Z' * Z) \ (Z' * Ys[i])
+            weights[i] = (Z' * Z) \ (Z' * Ys[i])
         else
             dual_var = calc_dual!(dual_var, γ, Z, Ys[i])
-            solution.weights[i] = γ * Z' * dual_var
+            weights[i] = γ * Z' * dual_var
         end
     end
 
