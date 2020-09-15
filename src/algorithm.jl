@@ -7,7 +7,8 @@ function solve_MIOP(
     num_relevant::Int,
     γ::Float64,
     optimizer;
-    optimizer_params = NamedTuple(),
+    optimizer_params = Dict(),
+    silent::Bool = false,
     )
     num_clusters = length(Ys)
     num_features = size(Xs[1], 2)
@@ -19,8 +20,13 @@ function solve_MIOP(
     @views bin_init[1:num_relevant] .= 1
     initial_bound = regression_objective!(Xs, Ys, bin_grad, bin_init, γ, num_samples, dual_vars, work)
 
-    model = direct_model(optimizer())
-    @variable(model, bin_var[i in 1:num_features], Bin) #, start = bin_init[i])
+    # model = direct_model(optimizer())
+    model = Model(optimizer)
+    set_optimizer_attribute(model, MOI.Silent(), silent)
+    for (attr, val) in optimizer_params
+        set_optimizer_attribute(model, attr, val)
+    end
+    @variable(model, bin_var[i in 1:num_features], Bin, start = bin_init[i])
     @variable(model, approx_obj >= 0)
     @objective(model, Min, approx_obj)
     @constraint(model, sum(bin_var) <= num_relevant)
@@ -30,7 +36,7 @@ function solve_MIOP(
         bin_val = map(x -> callback_value(cb_data, x), bin_var)
         approx_obj_val = callback_value(cb_data, approx_obj)
         obj = regression_objective!(Xs, Ys, bin_grad, bin_val, γ, num_samples, dual_vars, work)
-        if approx_obj_val < obj - 1e-6
+        if approx_obj_val < obj - 1e-3
             con = @build_constraint(approx_obj >= obj + dot(bin_grad, bin_var - bin_val))
             MOI.submit(model, MOI.LazyConstraint(cb_data), con)
         end
@@ -49,7 +55,7 @@ function solve_MIOP(
             # just do least squares
             weights[i] = (Z' * Z) \ (Z' * Ys[i])
         else
-            dual_var = calc_dual!(dual_var, γ, Z, Ys[i])
+            dual_var = calc_dual!(dual_vars[i], γ, Z, Ys[i])
             weights[i] = γ * Z' * dual_var
         end
     end
