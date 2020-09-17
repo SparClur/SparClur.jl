@@ -1,7 +1,6 @@
 # https://github.com/lkapelevich/ClusterRegression.jl/blob/master/datasets/synthetic/experiments/support_recovery.jl
 using SparClur2
 using CPLEX
-using GLPK
 using Random
 using DataFrames
 import StatsBase: mean, std
@@ -12,13 +11,10 @@ num_features = 2000
 cluster_range = [1, 2, 5, 10, 20]
 num_relevant = 10
 optimizer = CPLEX.Optimizer
-# optimizer = GLPK.Optimizer
 # coordinated_gamma_factors = [0.001, 0.01, 0.02, 0.04, 0.08, 0.1, 1.0] # 0
-coordinated_gamma_factors = [1e-7, 1e-6, 1e-5, 1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0] # 2
-num_obs_range = 100:20:600
+coordinated_gamma_factors = [1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0, 100_000.0] # 2
+num_obs_range = 60:20:600
 seeds = 1:5
-# optimizer_params = Dict("tm_lim" => 10 * 1_000)
-# optimizer_params = Dict()
 optimizer_params = ("CPX_PARAM_TILIM" => 30, "CPXPARAM_MIP_Tolerances_MIPGap" => 1e-2)
 
 # Since we don't do an out-of-sample test with synthetic data, we shouldn't
@@ -34,14 +30,18 @@ function get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
         acc = SparClur2.accuracy(supp, true_supp)
         Y_preds = [Xs[k][:, supp] * weights[k] for k in eachindex(Ys)]
         mse = sum(sum(abs2, Y_preds[k] - Ys[k]) for k in eachindex(Ys))
-        if mse < best_mse
+        if mse < best_mse - 1e-3
         # if (acc > best_acc + 1e-3) # || (acc ≈ 1 && gamma_time < best_time)
             # best_acc = acc
             best_mse = mse
             best_gamma = gamma
             best_time = gamma_time
         end
-        @show gamma, acc, mse, gamma_time
+        num_features = size(Xs[1], 2)
+        open("output/validexp1_num_clusters_$(length(Xs))_num_features_$(num_features)_num_obs_$(num_obs).txt", "a") do io
+            println(io, "gamma = ", gamma, " acc = ", acc, " mse = ", mse, " time = ", gamma_time)
+            flush(io)
+        end
     end
     return best_gamma
 end
@@ -59,6 +59,13 @@ end
         # data, truth = construct_synthetic(nfeatures, cluster_sizes, nrelevant, snr=SNR, same_weights=false, zero_one=true)
         (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, cluster_sizes, num_relevant, snr = signal_ratio)
         gamma = get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
+
+        # TODO delete
+        Random.seed!(seeds[end] + 2)
+        # data, truth = construct_synthetic(nfeatures, cluster_sizes, nrelevant, snr=SNR, same_weights=false, zero_one=true)
+        (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, cluster_sizes, num_relevant, snr = signal_ratio)
+        gamma = get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
+
         @show gamma
         # Now test model on five different sets of data
         for seed in seeds

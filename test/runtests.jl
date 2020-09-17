@@ -55,7 +55,7 @@ end
     num_relevant = 10
 
     @testset "MIOP" begin
-        @testset "c" for c in cluster_sizes
+        @testset "$c" for c in cluster_sizes
             Random.seed!(32)
             (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, c, num_relevant)
             (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, num_relevant, gamma_MIOP, CPLEX.Optimizer)
@@ -65,19 +65,19 @@ end
     end
 
     @testset "relaxation" begin
-        @testset "c" for c in cluster_sizes
+        @testset "$c" for c in cluster_sizes
             gamma_relaxation = 1.0
             @testset "two clusters" begin
                 Random.seed!(32)
                 (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, c, num_relevant)
-                (supp, indices, weights) = SparClur2.solve_relaxation(Xs, Ys, num_relevant, gamma = gamma_relaxation)
+                (supp, num_indices, weights) = SparClur2.solve_relaxation(Xs, Ys, num_relevant, gamma = gamma_relaxation)
                 @test supp ≈ true_supp
                 @test weights ≈ weights
             end
             @testset "one cluster" begin
                 Random.seed!(64)
                 (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, [c[1]], num_relevant)
-                (supp, indices, weights) = SparClur2.solve_relaxation(Xs, Ys, num_relevant, gamma = gamma_relaxation)
+                (supp, num_indices, weights) = SparClur2.solve_relaxation(Xs, Ys, num_relevant, gamma = gamma_relaxation)
                 @test supp ≈ true_supp
                 @test weights ≈ weights
             end

@@ -2,22 +2,21 @@
     solve_MIOP
 """
 function solve_MIOP(
-    Xs::Vector{Matrix{Float64}},
-    Ys::Vector{Vector{Float64}},
+    Xs::Vector{<:AbstractMatrix{Float64}},
+    Ys::Vector{<:AbstractVector{Float64}},
     num_relevant::Int,
     γ::Float64,
     optimizer;
     optimizer_params = Dict(),
     silent::Bool = false,
+    bin_init = vcat(ones(num_relevant), zeros(size(Xs[1], 2) - num_relevant)),
     )
     num_clusters = length(Ys)
     num_features = size(Xs[1], 2)
     num_samples  = sum(length(Y) for Y in Ys)
-    dual_vars = [similar(Y) for Y in Ys]
+    dual_vars = [zeros(length(Y)) for Y in Ys]
     bin_grad = zeros(num_features)
-    bin_init = zeros(num_features)
     work = similar(bin_grad)
-    @views bin_init[1:num_relevant] .= 1
     initial_bound = regression_objective!(Xs, Ys, bin_grad, bin_init, γ, num_samples, dual_vars, work)
 
     # model = direct_model(optimizer())
@@ -69,7 +68,7 @@ function calc_dual!(
     dual_var::Vector{Float64},
     γ::Float64,
     Z::AbstractMatrix{Float64},
-    Y::Vector{Float64},
+    Y::AbstractVector{Float64},
     )
     k = size(Z, 2)
     # compute (Iₙ + γZZᵀ)⁻¹ Y  via Y - Z (Iₚ / γ + γZᵀZ)⁻¹ Zᵀ Y
@@ -85,8 +84,8 @@ end
 
 # computes the objective of the loss function and updates bin_grad
 function regression_objective!(
-    Xs::Vector{Matrix{Float64}},
-    Ys::Vector{Vector{Float64}},
+    Xs::Vector{<:AbstractMatrix{Float64}},
+    Ys::Vector{<:AbstractVector{Float64}},
     bin_grad::Vector{Float64},
     bin_val::Vector{Float64},
     γ::Float64,

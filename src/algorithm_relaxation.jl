@@ -19,7 +19,7 @@ struct Cache
 end
 
 # heuristic
-function getdelta!(stepping_factor::Float64, X::Matrix{Float64}, Y::Vector{Float64}, a::Vector{Float64},
+function getdelta!(stepping_factor::Float64, X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, a::Vector{Float64},
     nabla::Vector{Float64}, indices::Vector{Int}, n_indices::Int, gamma::Float64, pc::PolyakCache, astar::Vector{Float64})
 
     lower_bound = dual_bound(X, Y, a, indices, n_indices, gamma)
@@ -50,13 +50,13 @@ function updatefactor(pc::PolyakCache, old_ub::Float64, stepping_factor::Float64
 end
 
 function solve_relaxation(
-    Xs::Vector{Matrix{Float64}},
-    Ys::Vector{Vector{Float64}},
+    Xs::Vector{<:AbstractMatrix{Float64}},
+    Ys::Vector{<:AbstractVector{Float64}},
     num_relevant::Int;
     stepping_factor = 0.5,
     max_iter::Int = 100,
     averaging::Bool = true,
-    gamma = 1 / sqrt(size(Xs[1], 1))
+    gamma = 1 / sqrt(size(Xs[1], 1)),
     )
 
     # heuristic scaling (ub - lb) / norm^2
@@ -111,22 +111,22 @@ function solve_relaxation(
 
     w = Vector{Float64}[]
     for k in 1:num_clusters
-        @views A = Xs[k][:, indices]
+        @views A = Xs[k][:, indices[1:n_indices]]
         if size(A, 1) >= size(A, 2)
             push!(w, (A' * A) \ (A' * Ys[k]))
         else
             warn("You should have minbucket ≥ k for good estimates.")
-            a0 = similar(Ys[k])
+            a0 = zeros(size(Ys[k]))
             calc_dual!(a0, gamma, A, Ys[k])
             push!(w, gamma * A' * a0)
         end
     end
 
-    return (indices, indices, w)
+    return (indices, n_indices, w)
   end
 
 
-function grad_dual!(g::Vector{Float64}, Y::Vector{Float64}, X::Matrix{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int, gamma::Float64)
+function grad_dual!(g::Vector{Float64}, Y::AbstractVector{Float64}, X::AbstractMatrix{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int, gamma::Float64)
     @. g -= a + Y
     for j in 1:n_indices
         @views x = X[:, indices[j]]
@@ -136,7 +136,7 @@ function grad_dual!(g::Vector{Float64}, Y::Vector{Float64}, X::Matrix{Float64}, 
     return
 end
 
-function partial_min!(indices, n_indices::Int, Xs::Vector{Matrix{Float64}}, a::Vector{Vector{Float64}}, gamma::Float64, cache::Cache)
+function partial_min!(indices, n_indices::Int, Xs::Vector{<:AbstractMatrix{Float64}}, a::Vector{Vector{Float64}}, gamma::Float64, cache::Cache)
     perm = cache.sortperm
     p = size(Xs[1], 2)
     # cluster case is maxⱼ: ∑ₖ αₖ'XⱼXⱼ'αₖ
@@ -150,17 +150,17 @@ function partial_min!(indices, n_indices::Int, Xs::Vector{Matrix{Float64}}, a::V
     return n_indices
 end
 
-function ax_squared(X::Matrix{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int)
+function ax_squared(X::AbstractMatrix{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int)
     @views return sum(dot(a, X[:, indices[j]]) ^ 2 for j in 1:n_indices)
 end
 
-function primal_bound(X::Matrix{Float64}, Y::Vector{Float64}, gamma::Float64, indices::Vector{Int}, n_indices::Int, astar::Vector{Float64})
+function primal_bound(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, gamma::Float64, indices::Vector{Int}, n_indices::Int, astar::Vector{Float64})
     calc_dual!(astar, gamma, X[:, indices], Y)
     axsum = ax_squared(X, astar, indices, n_indices)
     return dot(Y, astar) - (sum(abs2, astar) + gamma * axsum) / 2
 end
 
-function dual_bound(X::Matrix{Float64}, Y::Vector{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int, gamma::Float64)
+function dual_bound(X::AbstractMatrix{Float64}, Y::AbstractVector{Float64}, a::Vector{Float64}, indices::Vector{Int}, n_indices::Int, gamma::Float64)
     axsum = ax_squared(X, a, indices, n_indices)
     return dot(Y, a) - (sum(abs2, a) + gamma * axsum) / 2
 end
