@@ -9,57 +9,14 @@ import StatsBase
 using DataFrames # TODO remove
 
 data_dir = "experiments/data"
-normalized_dir = joinpath(data_dir, "normalized")
-
-# TODO normalize data
 
 optimizer = CPLEX.Optimizer
-optimizer_params = ("CPX_PARAM_TILIM" => 30, "CPXPARAM_MIP_Tolerances_MIPGap" => 1e-2)
+optimizer_params = ("CPX_PARAM_TILIM" => 120, "CPXPARAM_MIP_Tolerances_MIPGap" => 1e-2)
 
-gamma_range = [1e-6, 0.001, 0.1, 10.0, 100.0]
-q_range = 5:10
-silent = true
+gamma_range = [1e-6, 0.001, 0.03, 0.01, 0.1, 1.0, 10.0, 100.0]
+q_range = 10:10
+silent = false
 depths = 3:3
-
-function unscale_pred(pred, y_mean, y_scal)
-    return (pred .* y_scal) .+ y_mean
-end
-
-# TODO add a bias term
-function normalize_data(depth)
-    train_data = CSV.read(joinpath(data_dir, "const_depth$(depth)_train.csv"), DataFrame)
-    num_train = size(train_data, 1)
-    test_data = CSV.read(joinpath(data_dir, "const_depth$(depth)_test.csv"), DataFrame)
-    num_test = size(test_data, 1)
-
-    train_X = train_data[:, 1:(end - 3)]
-    test_X = test_data[:, 1:(end - 3)]
-    mean_X = StatsBase.mean.(eachcol(train_X))
-    scal_X = StatsBase.std.(eachcol(train_X))
-    rescaled_train_X = (train_X .- mean_X') ./ scal_X'
-    rescaled_test_X = (test_X .- mean_X') ./ scal_X'
-
-    train_Y = train_data[:, end - 2]
-    test_Y = test_data[:, end - 2]
-    mean_Y = StatsBase.mean(train_Y)
-    scal_Y = StatsBase.std(train_Y)
-    rescaled_train_Y = (train_Y .- mean_Y) ./ scal_Y
-
-    # TODO delete, just debugging
-    num_cols = size(train_data, 2)
-    check = hcat(train_data[:, 1:(end - 3)], train_data[:, end - 2])
-    rescale!(check)
-    @assert check == hcat(rescaled_train_X, rescaled_train_Y)
-
-    # NOTE first column is bias, last column is memberships
-    rescaled_train = hcat(ones(num_train), Array(rescaled_train_X), rescaled_train_Y, train_data[:, end]) # TODO why Array?
-    rescaled_test = hcat(ones(num_test), Array(rescaled_test_X), Array(test_Y), test_data[:, end])
-
-    isdir(normalized_dir) || mkdir(normalized_dir)
-    CSV.write(joinpath(normalized_dir, "const_depth$(depth)_train.csv"), DataFrame(rescaled_train)) # TODO shouldn't need DataFrame()
-    CSV.write(joinpath(normalized_dir, "const_depth$(depth)_test.csv"), DataFrame(rescaled_test))
-    return (mean_Y, scal_Y)
-end
 
 # allow clusters to be an input in case of empty clusters
 function make_clusters(X_list, Y_list, memberships_list, clusters)
@@ -92,11 +49,10 @@ function get_warm_start(Xs, Ys, q::Int)
 end
 
 function train_sparclur(depth; relaxation = true, ignore_coordination = false)
-    data_train = Array(CSV.read(joinpath(normalized_dir, "const_depth$(depth)_train.csv"), DataFrame)) # TODO
-    num_features = size(data_train, 2)
-    X_big_list = data_train[:, 1:(end - 2)]
-    Y_big_list = data_train[:, end - 1]
-    num_obs = size(Y_big_list, 1)
+    data_train = Array(CSV.read(joinpath(data_dir, "const_depth$(depth)_train_s1.csv"), DataFrame)) # TODO
+    (num_obs, num_features) = size(data_train)
+    X_big_list = hcat(ones(num_obs), data_train[:, 1:(end - 3)])
+    Y_big_list = data_train[:, end - 2]
     memberships_list = Int.(data_train[:, end])
     clusters = unique(memberships_list) # not contiguous
     folds = kfolds(collect(1:num_obs), k = 5)
@@ -159,6 +115,7 @@ function train_sparclur(depth; relaxation = true, ignore_coordination = false)
 
     (_, best_idx) = findmin(mse_scores)
     (best_q, best_gamma) = (q_range[best_idx[1]], gamma_range[best_idx[2]])
+    @show best_gamma
     # retrain
     (Xs_big, Ys_big) = make_clusters(X_big_list, Y_big_list, memberships_list, clusters)
     if relaxation
@@ -194,8 +151,10 @@ function train_sparclur(depth; relaxation = true, ignore_coordination = false)
         end
     end
     @show supp
-    return (best_gamma, (supp, weights))
+    return (clusters, best_gamma, (supp, weights))
 end
+
+sol = train_sparclur(depths[1], relaxation = true, ignore_coordination = true)
 
 function train_lasso()
 end
@@ -205,19 +164,18 @@ function test_sparclur()
     use_relaxation = true
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths)
-        (mean_Y, scal_Y) = normalize_data(depth)
-        (best_gamma, (supp, weights)) = train_sparclur(depth, relaxation = use_relaxation, ignore_coordination = ignore_coord)
-        data_test = Array(CSV.read(joinpath(normalized_dir, "const_depth$(depth)_test.csv"), DataFrame)) # TODO
-        X_list = data_test[:, 1:(end - 2)]
-        Y_list = data_test[:, end - 1]
+        (clusters, best_gamma, (supp, weights)) = sol
+        # (best_gamma, (supp, weights)) = train_sparclur(depth, relaxation = use_relaxation, ignore_coordination = ignore_coord)
+        data_test = Array(CSV.read(joinpath(data_dir, "const_depth$(depth)_test_s1.csv"), DataFrame)) # TODO
+        num_obs = size(data_test, 1)
+        X_list = hcat(ones(num_obs), data_test[:, 1:(end - 3)])
+        Y_list = data_test[:, end - 2]
         memberships_list = Int.(data_test[:, end])
-        clusters = unique(memberships_list)
         (Xs_test, Ys_test) = make_clusters(X_list, Y_list, memberships_list, clusters)
         Ys_pred = [Xs_test[c][:, supp[c]] * weights[c] for c in eachindex(clusters)]
-        Ys_pred = unscale_pred.(Ys_pred, mean_Y, scal_Y)
         mse = sum(sum(abs2, Ys_pred[c] - Ys_test[c]) for c in eachindex(clusters))
         # baseline_mse = sum(sum(abs2, mean(Ys_test[c]) .- Ys_test[c]) for c in eachindex(clusters))
-        mean_all = mean(Y_list)
+        mean_all = StatsBase.mean(Y_list)
         baseline_mse = sum(sum(abs2, mean_all .- Ys_test[c]) for c in eachindex(clusters))
         res[depth_idx] = 1 - mse / baseline_mse
         open("output/housing_depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation).txt", "w") do io
@@ -230,31 +188,31 @@ function test_sparclur()
     return res
 end
 res = test_sparclur()
-# @show res
+@show res
 
 
 function test_ort_point()
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths)
-        data_test = Array(CSV.read(joinpath(data_dir, "const_depth$(depth)_test.csv"), DataFrame))
+        data_test = Array(CSV.read(joinpath(data_dir, "const_depth$(depth)_test_s1.csv"), DataFrame))
         Y_pred = data_test[:, end - 1]
         Y_test = data_test[:, end - 2]
         mse = sum(abs2, Y_pred - Y_test)
-        baseline_mse = sum(abs2, Y_test .- mean(Y_test))
+        baseline_mse = sum(abs2, Y_test .- StatsBase.mean(Y_test))
         res[depth_idx] = 1 - mse / baseline_mse
     end
     return res
 end
-# @show test_ort_point()
+@show test_ort_point()
 #
 function test_ort_lasso()
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths)
-        data_test = Array(CSV.read("experiments/data/linear_depth$(depth)_test.csv", DataFrame))
+        data_test = Array(CSV.read("experiments/data/linear_depth$(depth)_test_s1.csv", DataFrame))
         Y_pred = data_test[:, end - 1]
         Y_test = data_test[:, end - 2]
         mse = sum(abs2, Y_pred - Y_test)
-        baseline_mse = sum(abs2, Y_test .- mean(Y_test))
+        baseline_mse = sum(abs2, Y_test .- StatsBase.mean(Y_test))
         res[depth_idx] = 1 - mse / baseline_mse
     end
     return res

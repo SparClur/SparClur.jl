@@ -49,7 +49,7 @@ function solve_MIOP(
     weights = [Float64[] for _ in eachindex(Ys)]
     for i in 1:num_clusters
         Z = Xs[i][:, supp]
-        # if not underdetermined
+        # if overdetermined
         if length(supp) <= size(Z, 1)
             # just do least squares
             weights[i] = (Z' * Z) \ (Z' * Ys[i])
