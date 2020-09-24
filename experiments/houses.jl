@@ -121,8 +121,8 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
                 # TODO handle better, if there is an issue in factorizing for w, poor choice of q leads to dependent cols
                 if score > 1e9
                     println("factorization issue for q = $q")
-                #     mse_scores[q_idx, :] .= Inf
-                #     continue
+                    mse_scores[q_idx, :] .= Inf
+                    continue
                 end
                 mse_scores[q_idx, gamma_idx] += sum(sum(abs2, Ys_pred[c] - Ys_valid[c]) for c in eachindex(clusters))
                 println(valid_io, "$(fold_idx),$(q),$(gamma),$(mse_scores[q_idx, gamma_idx])")
