@@ -62,7 +62,9 @@ CSV.write("output/exp3.csv", DataFrame(results))
 function analyze(results)
     df = DataFrame(results[:, 2:end], [:shared, :k, :accuracy, :a_common, :false_detection, :time, :a_limit, :r2])
     se(x) = std(x, corrected = false)
-    df_agg = aggregate(df, [:shared, :k], [mean, se]) # TODO deprecation
+    # df_agg = aggregate(df, [:shared, :k], [mean, se]) # TODO deprecation
+    cols = [:shared, :k]
+    df_agg = combine(groupby(df, cols), [names(df, Not(cols)) .=> f for f in [mean, se]]...)
 
     for incommon in num_common_range
         subdf = filter(row -> row[:shared] == incommon, df_agg)

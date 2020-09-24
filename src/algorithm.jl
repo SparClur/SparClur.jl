@@ -52,7 +52,22 @@ function solve_MIOP(
         # if overdetermined
         if length(supp) <= size(Z, 1)
             # just do least squares
-            weights[i] = (Z' * Z) \ (Z' * Ys[i])
+            fact = qr(Z)
+            try
+                weights[i] = fact \ Ys[i]
+            catch e
+                println(e)
+                println("TODO debug")
+                fact = qr(Symmetric(Z' * Z))
+                weights[i] = fact \ (Z' * Ys[i])
+            end
+
+            # fact = bunchkaufman(Symmetric(Z' * Z), check = false)
+            # if !issuccess(fact)
+            #     @show eigvals(Z' * Z), size(Z)
+            #     fact = bunchkaufman(Symmetric(Z' * Z) + I)
+            # end
+            # weights[i] = fact \ (Z' * Ys[i])
         else
             dual_var = calc_dual!(dual_vars[i], γ, Z, Ys[i])
             weights[i] = γ * Z' * dual_var

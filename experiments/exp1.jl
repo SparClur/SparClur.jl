@@ -11,8 +11,8 @@ num_features = 2000
 cluster_range = [1, 2, 5, 10, 20]
 num_relevant = 10
 optimizer = CPLEX.Optimizer
-# coordinated_gamma_factors = [0.001, 0.01, 0.02, 0.04, 0.08, 0.1, 1.0] # 0
-coordinated_gamma_factors = [1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0, 100_000.0] # 2
+# coordinated_gamma_factors = [0.001, 0.01, 0.02, 0.04, 0.08, 0.1, 1.0]
+coordinated_gamma_factors = [1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0, 100_000.0]
 num_obs_range = 60:20:600
 seeds = 1:5
 optimizer_params = ("CPX_PARAM_TILIM" => 30, "CPXPARAM_MIP_Tolerances_MIPGap" => 1e-2)
@@ -60,13 +60,6 @@ end
         (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, cluster_sizes, num_relevant, snr = signal_ratio)
         gamma = get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
 
-        # TODO delete
-        Random.seed!(seeds[end] + 2)
-        # data, truth = construct_synthetic(nfeatures, cluster_sizes, nrelevant, snr=SNR, same_weights=false, zero_one=true)
-        (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, cluster_sizes, num_relevant, snr = signal_ratio)
-        gamma = get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
-
-        @show gamma
         # Now test model on five different sets of data
         for seed in seeds
             @show seed
@@ -86,14 +79,11 @@ CSV.write("output/exp1_2.csv", DataFrame(results))
 
 function analyze(results)
     df = DataFrame(results[:, 2:(end - 1)], [:observations, :nclusters, :accuracy, :false_detection, :time])
-
     se(x) = std(x, corrected = false)
-    df_agg = aggregate(df, [:observations, :nclusters], [mean, se])
-
-
+    cols = [:observations, :nclusters]
+    df_agg = combine(groupby(df, cols), [names(df, Not(cols)) .=> f for f in [mean, se]]...)
     for nclusters in cluster_range
         subdf = filter(row -> row[:nclusters] == nclusters, df_agg)
-        # delete!(subdf, :nclusters)
         isdir("output") || mkdir("output")
         CSV.write("output/nclusters_$(nclusters)_cplex.csv", subdf)
     end

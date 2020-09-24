@@ -24,9 +24,7 @@ function getdelta!(stepping_factor::Float64, X::AbstractMatrix{Float64}, Y::Abst
 
     lower_bound = dual_bound(X, Y, a, indices, n_indices, gamma)
     upper_bound = primal_bound(X, Y, gamma, indices, n_indices, astar)
-    if upper_bound < pc.best_upper
-        pc.best_upper = upper_bound
-    end
+    (upper_bound < pc.best_upper) && (pc.best_upper = upper_bound)
     (lower_bound > pc.best_lower) && (pc.best_lower = lower_bound)
     if lower_bound - sgtol > upper_bound + sgtol
           error("Bounds overlap. LB = $lowerbound and UB = $upper_bound.")
@@ -112,8 +110,26 @@ function solve_relaxation(
     w = Vector{Float64}[]
     for k in 1:num_clusters
         @views A = Xs[k][:, indices[1:n_indices]]
+        # @show eigvals(A' * A), size(A)
         if size(A, 1) >= size(A, 2)
-            push!(w, (A' * A) \ (A' * Ys[k]))
+            # fact = qr(A)
+            # @show svdvals(A)
+            # push!(w, fact \ Ys[k])
+            # fact = bunchkaufman(Symmetric(A' * A), check = false)
+            # if !issuccess(fact)
+            #     @show eigvals(A' * A), size(A)
+            #     fact = bunchkaufman(Symmetric(A' * A + I))
+            # end
+            # push!(w, fact \ (A' * Ys[k]))
+            fact = qr(A)
+            try
+                push!(w, fact \ Ys[k])
+            catch e
+                println(e)
+                println("TODO debug")
+                fact = qr(Symmetric(A' * A))
+                push!(w, fact \ (A' * Ys[k]))
+            end
         else
             warn("You should have minbucket ≥ k for good estimates.")
             a0 = zeros(size(Ys[k]))
