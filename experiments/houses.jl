@@ -118,12 +118,6 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
                 end
                 Ys_pred = [Xs_valid[c][:, supp[c]] * weights[c] for c in eachindex(clusters)]
                 score = sum(sum(abs2, Ys_pred[c] - Ys_valid[c]) for c in eachindex(clusters))
-                # TODO handle better, if there is an issue in factorizing for w, poor choice of q leads to dependent cols
-                if score > 1e9
-                    println("factorization issue for q = $q")
-                    mse_scores[q_idx, :] .= Inf
-                    continue
-                end
                 mse_scores[q_idx, gamma_idx] += sum(sum(abs2, Ys_pred[c] - Ys_valid[c]) for c in eachindex(clusters))
                 println(valid_io, "$(fold_idx),$(q),$(gamma),$(mse_scores[q_idx, gamma_idx])")
                 flush(valid_io)
@@ -143,7 +137,7 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
             weights = Vector{Float64}[]
             # one leaf = single cluster at a time
             for c in eachindex(clusters)
-                (supp_c, num_supp, weights_c) = SparClur2.solve_relaxation([Xs_big[c]], [Ys_big[c]], best_q, gamma = best_gamma)
+                (supp_c, num_supp, weights_c) = SparClur2.solve_relaxation([Xs_big[c]], [Ys_big[c]], best_q[c], gamma = best_gamma[c])
                 push!(supp, supp_c[1:num_supp])
                 push!(weights, weights_c[1])
             end
@@ -158,7 +152,7 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
             # one leaf = single cluster at a time
             for c in eachindex(clusters)
                 warm_start = get_warm_start([Xs_big[c]], [Ys_big[c]], best_q)
-                (supp_c, weights_c) = SparClur2.solve_MIOP([Xs_big[c]], [Ys_big[c]], best_q, best_gamma, optimizer, silent = silent, optimizer_params = optimizer_params, bin_init = warm_start)
+                (supp_c, weights_c) = SparClur2.solve_MIOP([Xs_big[c]], [Ys_big[c]], best_q[c], best_gamma[c], optimizer, silent = silent, optimizer_params = optimizer_params, bin_init = warm_start)
                 push!(supp, supp_c)
                 push!(weights, weights_c[1])
             end
@@ -172,6 +166,15 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
 end
 
 # sol = train_sparclur(5, 1, relaxation = false, ignore_coordination = false)
+# (clusters, best_gamma, (supp, weights)) = sol
+# depth = 5; seed = 1;
+# (X_list, Y_list, memberships_list) = read_data(depth, seed, false)
+# (Xs_test, Ys_test) = make_clusters(X_list, Y_list, memberships_list, clusters)
+# Ys_pred = [Xs_test[c][:, supp[c]] * weights[c] for c in eachindex(clusters)]
+# mse = sum(sum(abs2, Ys_pred[c] - Ys_test[c]) for c in eachindex(clusters))
+# mean_all = mean(Y_list)
+# baseline_mse = sum(sum(abs2, mean_all .- Ys_test[c]) for c in eachindex(clusters))
+# r2 = 1 - mse / baseline_mse
 
 function test_sparclur(; ignore_coord = false, use_relaxation = true)
     res = zeros(length(depths))
@@ -197,12 +200,13 @@ end
 # res = test_sparclur()
 # @show res
 
-for use_relaxation in [true, false], ignore_coord in [false, true]
-    test_sparclur(ignore_coord = ignore_coord, use_relaxation = use_relaxation)
-end
+# for use_relaxation in [true, false], ignore_coord in [false, true]
+# for use_relaxation in [false], ignore_coord in [false]
+#     test_sparclur(ignore_coord = ignore_coord, use_relaxation = use_relaxation)
+# end
 
 function sparclur_r2()
-    for use_relaxation in [false], ignore_coord in [false], depth in 0:4
+    for use_relaxation in [true], ignore_coord in [false], depth in depths
         r2 = 0.0
         for seed in 1:5
             open("output/housing_depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt", "r") do io
@@ -251,7 +255,7 @@ function sparclur_vars()
                 push!(seldom, seldom_s)
             end
         end
-        @show round(mean(min_leaf), digits = 3), round(mean(max_leaf), digits = 3), round(mean(mean_leaf), digits = 3), round(mean(often), digits = 3), round(mean(seldom), digits = 3)
+        println(round(mean(min_leaf), digits = 3), " ", round(mean(max_leaf), digits = 3), " ", round(mean(mean_leaf), digits = 3), " ", round(mean(often), digits = 3), " ", round(mean(seldom), digits = 3))
     end
 end
 

@@ -46,7 +46,7 @@ function solve_MIOP(
 
     # recover optimal weights
     supp = getsupport(value.(bin_var))
-    weights = [zeros(num_relevant) for _ in eachindex(Ys)]
+    weights = [Float64[] for _ in eachindex(Ys)]
     for i in 1:num_clusters
         Z = Xs[i][:, supp]
         # if overdetermined
