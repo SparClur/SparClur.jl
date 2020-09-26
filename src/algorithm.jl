@@ -46,32 +46,42 @@ function solve_MIOP(
 
     # recover optimal weights
     supp = getsupport(value.(bin_var))
-    weights = [Float64[] for _ in eachindex(Ys)]
+    weights = [zeros(num_relevant) for _ in eachindex(Ys)]
     for i in 1:num_clusters
         Z = Xs[i][:, supp]
         # if overdetermined
-        if length(supp) <= size(Z, 1)
-            # just do least squares
-            fact = qr(Z)
-            try
-                weights[i] = fact \ Ys[i]
-            catch e
-                println(e)
-                println("TODO debug")
-                fact = qr(Symmetric(Z' * Z))
-                weights[i] = fact \ (Z' * Ys[i])
-            end
-
-            # fact = bunchkaufman(Symmetric(Z' * Z), check = false)
-            # if !issuccess(fact)
-            #     @show eigvals(Z' * Z), size(Z)
-            #     fact = bunchkaufman(Symmetric(Z' * Z) + I)
-            # end
-            # weights[i] = fact \ (Z' * Ys[i])
-        else
+        # if length(supp) <= size(Z, 1)
+        #     # just do least squares
+        #     # Z_rank = rank(Z)
+        #     fact = qr(Z)
+        #     Z_rank = count(abs.(diag(fact.R)) .> 1e-8)
+        #     @show Z_rank
+        #     fact = qr(Z[:, 1:Z_rank])
+        #     try
+        #         @show "good"
+        #         weights[i][1:Z_rank] .= fact \ Ys[i]
+        #         @show sum(abs2, Ys[i] - Z * weights[i])
+        #     catch e
+        #         # my_rank = count(abs.(diag(fact.R)) .> 1e-13)
+        #         # fact = qr(Z[:, 1:my_rank])
+        #         # weights[i][1:my_rank] .= fact \ Ys[i]
+        #         println(e)
+        #         println("TODO debug")
+        #         fact = bunchkaufman(Symmetric(Z' * Z + I * γ))
+        #         weights[i] = fact \ (Z' * Ys[i])
+        #         # @show sum(abs2, Ys[i] - Z * weights[i])
+        #     end
+        #
+        #     # fact = bunchkaufman(Symmetric(Z' * Z), check = false)
+        #     # if !issuccess(fact)
+        #     #     @show eigvals(Z' * Z), size(Z)
+        #     #     fact = bunchkaufman(Symmetric(Z' * Z) + I)
+        #     # end
+        #     # weights[i] = fact \ (Z' * Ys[i])
+        # else
             dual_var = calc_dual!(dual_vars[i], γ, Z, Ys[i])
             weights[i] = γ * Z' * dual_var
-        end
+        # end
     end
 
     return (supp, weights)
