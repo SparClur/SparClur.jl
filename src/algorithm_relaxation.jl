@@ -55,6 +55,7 @@ function solve_relaxation(
     max_iter::Int = 100,
     averaging::Bool = true,
     gamma = 1 / sqrt(size(Xs[1], 1)),
+    regularize_weights::Bool = true,
     )
 
     # heuristic scaling (ub - lb) / norm^2
@@ -111,31 +112,21 @@ function solve_relaxation(
     for k in 1:num_clusters
         @views A = Xs[k][:, indices[1:n_indices]]
         # @show eigvals(A' * A), size(A)
-        # if size(A, 1) >= size(A, 2)
-        #     # fact = qr(A)
-        #     # @show svdvals(A)
-        #     # push!(w, fact \ Ys[k])
-        #     # fact = bunchkaufman(Symmetric(A' * A), check = false)
-        #     # if !issuccess(fact)
-        #     #     @show eigvals(A' * A), size(A)
-        #     #     fact = bunchkaufman(Symmetric(A' * A + I))
-        #     # end
-        #     # push!(w, fact \ (A' * Ys[k]))
-        #     fact = qr(A)
-        #     try
-        #         push!(w, fact \ Ys[k])
-        #     catch e
-        #         println(e)
-        #         println("TODO debug")
-        #         fact = qr(Symmetric(A' * A))
-        #         push!(w, fact \ (A' * Ys[k]))
-        #     end
-        # else
-        #     warn("You should have minbucket ≥ k for good estimates.")
+        if size(A, 1) >= size(A, 2) && !regularize_weights
+            fact = qr(A)
+            try
+                push!(w, fact \ Ys[k])
+            catch e
+                println(e)
+                @warn("you should set `regularize_weights` = true")
+                fact = qr(Symmetric(A' * A))
+                push!(w, fact \ (A' * Ys[k]))
+            end
+        else
             a0 = zeros(size(Ys[k]))
             calc_dual!(a0, gamma, A, Ys[k])
             push!(w, gamma * A' * a0)
-        # end
+        end
     end
 
     return (indices, n_indices, w)

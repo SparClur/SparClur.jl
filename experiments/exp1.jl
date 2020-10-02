@@ -13,7 +13,7 @@ num_relevant = 10
 optimizer = CPLEX.Optimizer
 # coordinated_gamma_factors = [0.001, 0.01, 0.02, 0.04, 0.08, 0.1, 1.0]
 coordinated_gamma_factors = [1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0, 100_000.0]
-num_obs_range = 60:20:600
+num_obs_range = 60:20:800
 seeds = 1:5
 optimizer_params = ("CPX_PARAM_TILIM" => 30, "CPXPARAM_MIP_Tolerances_MIPGap" => 1e-2)
 
@@ -26,7 +26,7 @@ function get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
     best_mse = Inf
     best_time = Inf
     for gamma in coordinated_gamma_factors * num_relevant / num_obs
-        gamma_time = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, num_relevant, gamma, optimizer, optimizer_params = optimizer_params)
+        gamma_time = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, num_relevant, gamma, optimizer, optimizer_params = optimizer_params, regularize_weights = false)
         acc = SparClur2.accuracy(supp, true_supp)
         Y_preds = [Xs[k][:, supp] * weights[k] for k in eachindex(Ys)]
         mse = sum(sum(abs2, Y_preds[k] - Ys[k]) for k in eachindex(Ys))
@@ -65,7 +65,7 @@ end
             @show seed
             Random.seed!(seed)
             (Xs, Ys, true_supp, true_weights) = SparClur2.construct_synthetic(num_features, cluster_sizes, num_relevant, snr = signal_ratio)
-            tm = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, num_relevant, gamma, optimizer, optimizer_params = optimizer_params)
+            tm = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, num_relevant, gamma, optimizer, optimizer_params = optimizer_params, regularize_weights = false)
             acc = SparClur2.accuracy(supp, true_supp)
             fp = SparClur2.falsepositive(supp, true_supp)
             global idx += 1
@@ -75,7 +75,7 @@ end
     return results
 # end
 # results = runall()
-CSV.write("output/exp1_2.csv", DataFrame(results))
+CSV.write("output/exp1_3.csv", DataFrame(results))
 
 function analyze(results)
     df = DataFrame(results[:, 2:(end - 1)], [:observations, :nclusters, :accuracy, :false_detection, :time])

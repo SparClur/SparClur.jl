@@ -38,7 +38,7 @@ for (i, incommon) in enumerate(num_common_range), seed in seeds
     @show all_inds
     gamma = gamma_factor / num_obs
     for (k, model_q) in enumerate(model_q_range)
-        tm = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, model_q, gamma, optimizer, optimizer_params = optimizer_params, silent = true)
+        tm = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, model_q, gamma, optimizer, optimizer_params = optimizer_params, silent = true, regularize_weights = false)
         # acc = ClusterRegression.accuracy(model.indices, all_inds)
         acc = SparClur2.accuracy(supp, all_inds)
         # a_common = ClusterRegression.accuracy(model.indices, common_inds)
