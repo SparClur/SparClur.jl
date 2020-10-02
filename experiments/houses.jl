@@ -1,12 +1,9 @@
-# sparclur, sparclur relaxation, sparse relaxation, lasso, ORT point
-# bonus: sparse no relaxation, ORT linear
-
 import SparClur2
 import CSV
 import CPLEX
 import MLDataUtils: kfolds
 import StatsBase: mean
-using DataFrames # TODO remove
+using DataFrames
 using GLMNet
 
 data_dir = "experiments/data"
@@ -174,21 +171,9 @@ function train_sparclur(depth, seed; relaxation = true, ignore_coordination = fa
     return (clusters, best_gamma, (supp, weights))
 end
 
-# sol = train_sparclur(5, 1, relaxation = false, ignore_coordination = false)
-# (clusters, best_gamma, (supp, weights)) = sol
-# depth = 5; seed = 1;
-# (X_list, Y_list, memberships_list) = read_data(depth, seed, false)
-# (Xs_test, Ys_test) = make_clusters(X_list, Y_list, memberships_list, clusters)
-# Ys_pred = [Xs_test[c][:, supp[c]] * weights[c] for c in eachindex(clusters)]
-# mse = sum(sum(abs2, Ys_pred[c] - Ys_test[c]) for c in eachindex(clusters))
-# mean_all = mean(Y_list)
-# baseline_mse = sum(sum(abs2, mean_all .- Ys_test[c]) for c in eachindex(clusters))
-# r2 = 1 - mse / baseline_mse
-
 function test_sparclur(; ignore_coord = false, use_relaxation = true)
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths), seed in seeds
-        # (clusters, best_gamma, (supp, weights)) = sol
         (clusters, best_gamma, (supp, weights)) = train_sparclur(depth, seed, relaxation = use_relaxation, ignore_coordination = ignore_coord)
         (X_list, Y_list, memberships_list) = read_data(depth, seed, false)
         (Xs_test, Ys_test) = make_clusters(X_list, Y_list, memberships_list, clusters)
@@ -206,11 +191,8 @@ function test_sparclur(; ignore_coord = false, use_relaxation = true)
     end
     return res
 end
-# res = test_sparclur()
-# @show res
 
 # for use_relaxation in [true, false], ignore_coord in [false, true]
-# for use_relaxation in [false], ignore_coord in [false]
 #     test_sparclur(ignore_coord = ignore_coord, use_relaxation = use_relaxation)
 # end
 
@@ -329,17 +311,3 @@ function test_ort_point()
     return res ./ length(seeds)
 end
 # @show round.(test_ort_point(), digits = 3)
-#
-function test_ort_linear()
-    res = zeros(length(depths))
-    for (depth_idx, depth) in enumerate(depths), seed in seeds
-        data_test = Array(CSV.read(joinpath(data_dir, "linear_depth$(depth)_test_s$(seed).csv"), DataFrame))
-        Y_pred = data_test[:, end - 1]
-        Y_test = data_test[:, end - 2]
-        mse = sum(abs2, Y_pred - Y_test)
-        baseline_mse = sum(abs2, Y_test .- mean(Y_test))
-        res[depth_idx] += 1 - mse / baseline_mse
-    end
-    return res ./ length(seeds)
-end
-# @show round.(test_ort_linear(), digits = 3)

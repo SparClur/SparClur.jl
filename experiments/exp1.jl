@@ -11,7 +11,6 @@ num_features = 2000
 cluster_range = [1, 2, 5, 10, 20]
 num_relevant = 10
 optimizer = CPLEX.Optimizer
-# coordinated_gamma_factors = [0.001, 0.01, 0.02, 0.04, 0.08, 0.1, 1.0]
 coordinated_gamma_factors = [1e-4, 0.001, 0.01, 0.1, 1.0, 10.0, 100.0, 1000.0, 10_000.0, 100_000.0]
 num_obs_range = 60:20:800
 seeds = 1:5
@@ -22,7 +21,6 @@ optimizer_params = ("CPX_PARAM_TILIM" => 30, "CPXPARAM_MIP_Tolerances_MIPGap" =>
 # dataset.
 function get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
     best_gamma = 0.0
-    best_acc = -Inf # TODO mse instead
     best_mse = Inf
     best_time = Inf
     for gamma in coordinated_gamma_factors * num_relevant / num_obs
@@ -31,8 +29,6 @@ function get_gamma(Xs, Ys, true_supp, true_weights, num_relevant, num_obs)
         Y_preds = [Xs[k][:, supp] * weights[k] for k in eachindex(Ys)]
         mse = sum(sum(abs2, Y_preds[k] - Ys[k]) for k in eachindex(Ys))
         if mse < best_mse - 1e-3
-        # if (acc > best_acc + 1e-3) # || (acc ≈ 1 && gamma_time < best_time)
-            # best_acc = acc
             best_mse = mse
             best_gamma = gamma
             best_time = gamma_time
