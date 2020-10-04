@@ -2,25 +2,31 @@
     solve_MIOP
 """
 function solve_MIOP(
-    Xs::Vector{Matrix{Float64}},
-    Ys::Vector{Vector{Float64}},
+    Xs::Vector{<:AbstractMatrix{Float64}},
+    Ys::Vector{<:AbstractVector{Float64}},
     num_relevant::Int,
     γ::Float64,
     optimizer;
-    optimizer_params = NamedTuple(),
+    optimizer_params = Dict(),
+    silent::Bool = false,
+    bin_init = vcat(ones(num_relevant), zeros(size(Xs[1], 2) - num_relevant)),
+    regularize_weights::Bool = true,
     )
     num_clusters = length(Ys)
     num_features = size(Xs[1], 2)
     num_samples  = sum(length(Y) for Y in Ys)
-    dual_vars = [similar(Y) for Y in Ys]
+    dual_vars = [zeros(length(Y)) for Y in Ys]
     bin_grad = zeros(num_features)
-    bin_init = zeros(num_features)
     work = similar(bin_grad)
-    @views bin_init[1:num_relevant] .= 1
     initial_bound = regression_objective!(Xs, Ys, bin_grad, bin_init, γ, num_samples, dual_vars, work)
 
-    model = direct_model(optimizer())
-    @variable(model, bin_var[i in 1:num_features], Bin) #, start = bin_init[i])
+    # model = direct_model(optimizer())
+    model = Model(optimizer)
+    set_optimizer_attribute(model, MOI.Silent(), silent)
+    for (attr, val) in optimizer_params
+        set_optimizer_attribute(model, attr, val)
+    end
+    @variable(model, bin_var[i in 1:num_features], Bin, start = bin_init[i])
     @variable(model, approx_obj >= 0)
     @objective(model, Min, approx_obj)
     @constraint(model, sum(bin_var) <= num_relevant)
@@ -30,7 +36,7 @@ function solve_MIOP(
         bin_val = map(x -> callback_value(cb_data, x), bin_var)
         approx_obj_val = callback_value(cb_data, approx_obj)
         obj = regression_objective!(Xs, Ys, bin_grad, bin_val, γ, num_samples, dual_vars, work)
-        if approx_obj_val < obj - 1e-6
+        if approx_obj_val < obj - 1e-3
             con = @build_constraint(approx_obj >= obj + dot(bin_grad, bin_var - bin_val))
             MOI.submit(model, MOI.LazyConstraint(cb_data), con)
         end
@@ -44,12 +50,20 @@ function solve_MIOP(
     weights = [Float64[] for _ in eachindex(Ys)]
     for i in 1:num_clusters
         Z = Xs[i][:, supp]
-        # if not underdetermined
-        if length(supp) <= size(Z, 1)
+        # if overdetermined
+        if length(supp) <= size(Z, 1) && !regularize_weights
             # just do least squares
-            weights[i] = (Z' * Z) \ (Z' * Ys[i])
+            fact = qr(Z)
+            try
+                weights[i] = fact \ Ys[i]
+            catch e
+                println(e)
+                @warn("you should set `regularize_weights` = true")
+                fact = qr(Z' * Z)
+                weights[i] = fact \ (Z' * Ys[i])
+            end
         else
-            dual_var = calc_dual!(dual_var, γ, Z, Ys[i])
+            dual_var = calc_dual!(dual_vars[i], γ, Z, Ys[i])
             weights[i] = γ * Z' * dual_var
         end
     end
@@ -63,7 +77,7 @@ function calc_dual!(
     dual_var::Vector{Float64},
     γ::Float64,
     Z::AbstractMatrix{Float64},
-    Y::Vector{Float64},
+    Y::AbstractVector{Float64},
     )
     k = size(Z, 2)
     # compute (Iₙ + γZZᵀ)⁻¹ Y  via Y - Z (Iₚ / γ + γZᵀZ)⁻¹ Zᵀ Y
@@ -79,8 +93,8 @@ end
 
 # computes the objective of the loss function and updates bin_grad
 function regression_objective!(
-    Xs::Vector{Matrix{Float64}},
-    Ys::Vector{Vector{Float64}},
+    Xs::Vector{<:AbstractMatrix{Float64}},
+    Ys::Vector{<:AbstractVector{Float64}},
     bin_grad::Vector{Float64},
     bin_val::Vector{Float64},
     γ::Float64,
