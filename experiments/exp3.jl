@@ -39,16 +39,12 @@ for (i, incommon) in enumerate(num_common_range), seed in seeds
     gamma = gamma_factor / num_obs
     for (k, model_q) in enumerate(model_q_range)
         tm = @elapsed (supp, weights) = SparClur2.solve_MIOP(Xs, Ys, model_q, gamma, optimizer, optimizer_params = optimizer_params, silent = true, regularize_weights = false)
-        # acc = ClusterRegression.accuracy(model.indices, all_inds)
         acc = SparClur2.accuracy(supp, all_inds)
-        # a_common = ClusterRegression.accuracy(model.indices, common_inds)
         acc_common = SparClur2.accuracy(supp, true_common_inds)
-        # f = ClusterRegression.falsepositive(model.indices, all_inds)
         fp = SparClur2.falsepositive(supp, all_inds)
         pred_Ys = [test_Xs[k][:, supp] * weights[k] for k in 1:num_clusters]
-        test_err = sum(sum(abs2, test_Ys[k] - pred_Ys[k]) for k in 1:num_clusters) # TODO wrong
-        base_err = sum(sum(abs2, test_Ys[k] .- mean(test_Ys[k])) for k in 1:num_clusters) # TODO wrong
-        # base_err = sum(sum(abs2, test_Ys[k] .- mean(vcat(test_Ys...))) for k in 1:num_clusters) # TODO wrong
+        test_err = sum(sum(abs2, test_Ys[k] - pred_Ys[k]) for k in 1:num_clusters)
+        base_err = sum(sum(abs2, test_Ys[k] .- mean(test_Ys[k])) for k in 1:num_clusters)
         @show test_err, base_err
         rsqr = 1 - test_err / base_err
         global idx += 1
