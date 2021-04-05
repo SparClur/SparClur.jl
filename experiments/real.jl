@@ -9,19 +9,15 @@ using Random
 
 data_dir = "experiments/data"
 
-problem = "housing"
-# problem = "diabetes"
+# problem = "housing"
+problem = "diabetes"
 
 tree_method = "ORT"
 # tree_method = "ORTL"
 # tree_method = "CART"
 
 # just for reading files, not meaningful elsewhere
-if tree_method
-    leaf_method = "linear"
-else
-    leaf_method = "const"
-end
+leaf_method = (tree_method == "ORTL" ? "linear" : "const")
 
 output_dir = joinpath("output", tree_method)
 isdir(output_dir) || mkpath(output_dir)
@@ -318,12 +314,12 @@ function test_lasso()
 
     return round.(res ./ length(seeds), digits = 3)
 end
-# test_lasso()
+# r2 = test_lasso();
 
 function test_ort_point()
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths), seed in seeds
-        data_test = Array(CSV.read(joinpath(problem, tree_method, leaf_method * "_depth$(depth)_test_s$(seed).csv"), DataFrame))
+        data_test = Array(CSV.read(joinpath(data_dir, problem, tree_method, "const" * "_depth$(depth)_test_s$(seed).csv"), DataFrame))
         Y_pred = data_test[:, end - 1]
         Y_test = data_test[:, end - 2]
         mse = sum(abs2, Y_pred - Y_test)
@@ -337,7 +333,7 @@ end
 function test_ort_linear()
     res = zeros(length(depths))
     for (depth_idx, depth) in enumerate(depths), seed in seeds
-        data_test = Array(CSV.read(joinpath(problem, tree_method, leaf_method * "_depth$(depth)_test_s$(seed).csv"), DataFrame))
+        data_test = Array(CSV.read(joinpath(data_dir, problem, tree_method, "linear" * "_depth$(depth)_test_s$(seed).csv"), DataFrame))
         Y_pred = data_test[:, end - 1]
         Y_test = data_test[:, end - 2]
         mse = sum(abs2, Y_pred - Y_test)
@@ -347,3 +343,4 @@ function test_ort_linear()
     return res ./ length(seeds)
 end
 # @show round.(test_ort_linear(), digits = 3)
+;
