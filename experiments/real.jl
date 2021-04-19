@@ -19,7 +19,7 @@ tree_method = "ORT"
 # just for reading files, not meaningful elsewhere
 leaf_method = (tree_method == "ORTL" ? "linear" : "const")
 
-output_dir = joinpath("output", tree_method)
+output_dir = joinpath(pwd(), "output", problem, tree_method)
 isdir(output_dir) || mkpath(output_dir)
 
 optimizer = CPLEX.Optimizer
@@ -210,10 +210,10 @@ end
 # end
 
 function sparclur_r2()
-    for use_relaxation in [true], ignore_coord in [true], depth in depths
+    for use_relaxation in [true], ignore_coord in [false], depth in depths
         r2 = 0.0
         for seed in seeds
-            open(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt", "r") do io
+            open(joinpath(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt"), "r") do io
                 readline(io)
                 readline(io)
                 r2 += parse(Float64, readline(io))
@@ -246,10 +246,10 @@ end
 
 function sparclur_vars()
     depth = 5
-    for use_relaxation in [false], ignore_coord in [false]
+    for use_relaxation in [true], ignore_coord in [true]
         (min_leaf, max_leaf, mean_leaf, often, seldom, total) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         for seed in seeds
-            open(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt", "r") do io
+            open(joinpath(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt"), "r") do io
                 supp_str = readline(io)
                 supports = eval(Meta.parse(supp_str))
                 weights_str = readline(io)
@@ -271,6 +271,8 @@ function sparclur_vars()
             round(seldom, digits = 3), " ", round(total, digits = 3))
     end
 end
+
+sparclur_vars()
 
 function test_lasso()
     res = zeros(length(depths))
