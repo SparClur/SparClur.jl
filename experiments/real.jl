@@ -10,7 +10,9 @@ using Random
 data_dir = "experiments/data"
 
 # problem = "housing"
-problem = "diabetes"
+# problem = "diabetes"
+# problem = "first"
+problem = "bp"
 
 tree_method = "ORT"
 # tree_method = "ORTL"
@@ -72,7 +74,7 @@ function read_data(depth::Int, seed::Int, train::Bool)
     return (X_list, Y_list, memberships)
 end
 
-function train_sparclur(depth, seed; relaxation = true, ignore_coordination = false, q_range = 1:10)
+function train_sparclur(depth, seed; relaxation = true, ignore_coordination = false, q_range = 10:10)
     (X_big_list, Y_big_list, memberships_list) = read_data(depth, seed, true)
     (num_obs, num_features) = size(X_big_list)
     clusters = unique(memberships_list) # not contiguous
@@ -210,7 +212,7 @@ end
 # end
 
 function sparclur_r2()
-    for use_relaxation in [true], ignore_coord in [false], depth in depths
+    for use_relaxation in [false], ignore_coord in [true], depth in depths
         r2 = 0.0
         for seed in seeds
             open(joinpath(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt"), "r") do io
@@ -222,7 +224,7 @@ function sparclur_r2()
         @show use_relaxation, ignore_coord, depth, round(r2 / length(seeds), digits = 3)
     end
 end
-# sparclur_r2()
+sparclur_r2()
 
 function vars_per_leaf(supports)
     num_leaves = length(supports)
@@ -246,7 +248,7 @@ end
 
 function sparclur_vars()
     depth = 5
-    for use_relaxation in [true], ignore_coord in [true]
+    for use_relaxation in [true], ignore_coord in [true, false]
         (min_leaf, max_leaf, mean_leaf, often, seldom, total) = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         for seed in seeds
             open(joinpath(output_dir, "depth_$(depth)_ignore_coord_$(ignore_coord)_relaxation_$(use_relaxation)_s$(seed).txt"), "r") do io
@@ -272,7 +274,7 @@ function sparclur_vars()
     end
 end
 
-sparclur_vars()
+# sparclur_vars()
 
 function test_lasso()
     res = zeros(length(depths))
