@@ -2,7 +2,7 @@ import SparClur2
 import CSV
 import CPLEX
 import MLDataUtils: kfolds
-import StatsBase: mean
+import StatsBase: mean, std
 using DataFrames
 using GLMNet
 using Random
@@ -41,4 +41,21 @@ for seed in seeds
         println(sparse_io, "$(total_supp),$(res)")
     end
     close(sparse_io)
+end
+
+for method in ["sparse", "sparclur"]
+    p_vals = Dict(p => zeros(0) for p in 7:17)
+    for seed in 1:5
+        df = CSV.read("output/$(method)_s$(seed).csv", DataFrame)
+        for i in eachrow(df)
+            push!(p_vals[i.totalsupp], i.r2)
+        end
+    end
+    open("output/frontier_$(method).csv", "w") do summaryio
+        println(summaryio, "p,mean,se")
+        for (k, v) in sort(p_vals)
+            sd = std(v, corrected = true)
+            println(summaryio, "$(k),$(mean(v)),$(sd)")
+        end
+    end
 end
